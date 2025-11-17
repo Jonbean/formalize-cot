@@ -59,17 +59,17 @@ conda activate <env_name>
 pip install -r requirements.txt
 
 3.2. Credentials / API Keys (if using LLMs)
-	-	Set the following environment variables (or use a .env file):
-	-	OPENAI_API_KEY / <OTHER_LLM_API_KEY>
-	-	Any extra notes about rate limits, models, etc.
+-	Set the following environment variables (or use a .env file):
+-	OPENAI_API_KEY / <OTHER_LLM_API_KEY>
+-	Any extra notes about rate limits, models, etc.
 
 ⸻
 
 4. Translation Modules: AMR → Lean; CCG → Lean;
 
 4.1. Input format
-	-	Expected AMR data format encoded in JSON.
-	-	Example input file: `data/ready-to-be-translated-amr-data-format-sample.json`
+-	Expected AMR data format encoded in JSON.
+-	Example input file: `data/ready-to-be-translated-amr-data-format-sample.json`
 
 4.2. Basic usage
 
@@ -83,9 +83,9 @@ python CoT-AMR2Lean-tran.py --shared-dir ./Cot-Rationales --out-base ./CoT-In-Le
 ```
 
 4.3. Key options
-	-	--shared-dir — path to AMR files (json files with the format as in 4.1)
-	-	--out-base — directory for generated .lean files. this will generate one lean file per chain
-	-	--f-or-r — short for frame-centric or role-centric flag
+-	--shared-dir — path to AMR files (json files with the format as in 4.1)
+-	--out-base — directory for generated .lean files. this will generate one lean file per chain
+-	--f-or-r — short for frame-centric or role-centric flag
 
 4.4. CCG translation
 
@@ -100,12 +100,12 @@ python ccg2lean_pipeline_batch.py \
 ```
 
 4.5. key options
-    -   --batch-dir — path to rationale files (same json files with the format as in 4.1, only that we don't use the AMR in them, this module will parse the natural language with CCG parser)
-    -   --batch-glob — specifies the file type filter with file suffix
-    -   --batch-prefix - specifies the file type filter with file prefix
-    -   --batch-out-base - directory for generated .lean files. 
-    -   --model - the ccg parser embedding layer option
-    -   --annotator - the ccg pos and other linguistic features annotator module
+-   --batch-dir — path to rationale files (same json files with the format as in 4.1, only that we don't use the AMR in them, this module will parse the natural language with CCG parser)
+-   --batch-glob — specifies the file type filter with file suffix
+-   --batch-prefix - specifies the file type filter with file prefix
+-   --batch-out-base - directory for generated .lean files. 
+-   --model - the ccg parser embedding layer option
+-   --annotator - the ccg pos and other linguistic features annotator module
 ⸻
 
 5. Prover Modules: Prompting LLMs
@@ -122,13 +122,13 @@ python langgraph_cot_auto.py --inputs ../amr2lean-translator/autof-50-processed/
 5.2. Configuration
 
 Typical fields in configs/prover_default.yaml:
-	-	--inputs: the directory where lean files is stored
-	-	--out: the directory where llm chat log will be stored
-	-	--rounds: the maximum number of feedback loop to run before terminating the proving request per chain
-	-	--style: which translation pipeline the prover is fed. 3 options: autof, AMR-Role, and AMR-Frame
-	-	--min-id: (optional) can be specified by the index of the START file in the directory. This assumes the file names are sortable and the user knows the starting index of the file to execute this prompt engine
-    -   --max-id: (optional) can be specified by the index of the END file in the directory. This assumes the file names are sortable and the user knows the starting index of the file to execute this prompt engine
-    -   --exclude-processed: (optional) this option skips files that already have an output JSON file in the `--out` directory, avoiding repeated prompting effort
+-	--inputs: the directory where lean files is stored
+-	--out: the directory where llm chat log will be stored
+-	--rounds: the maximum number of feedback loop to run before terminating the proving request per chain
+-	--style: which translation pipeline the prover is fed. 3 options: autof, AMR-Role, and AMR-Frame
+-	--min-id: (optional) can be specified by the index of the START file in the directory. This assumes the file names are sortable and the user knows the starting index of the file to execute this prompt engine
+-   --max-id: (optional) can be specified by the index of the END file in the directory. This assumes the file names are sortable and the user knows the starting index of the file to execute this prompt engine
+-   --exclude-processed: (optional) this option skips files that already have an output JSON file in the `--out` directory, avoiding repeated prompting effort
 
 ⸻
 
