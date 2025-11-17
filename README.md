@@ -46,18 +46,24 @@ E.g., “formalization of natural language reasoning”
 3. Setup
 
 3.1. Environment
-
+```bash
 git clone <REPO_URL>
-cd <PROJECT_DIR>
+git clone git@github.com:Jonbean/AMRToolBox.git
+```
 
 **create env (pick one)**
-python -m venv .venv && source .venv/bin/activate
+`python -m venv .venv && source .venv/bin/activate`
 **or**
+```bash
 conda create -n <env_name> python=3.10.18
 conda activate <env_name>
-
+```
+```bash
+cd AMRToolBox
+pip install -e .
+cd ../formalize-cot
 pip install -r requirements.txt
-
+```
 3.2. Credentials / API Keys (if using LLMs)
 -	Set the following environment variables (or use a .env file):
 -	OPENAI_API_KEY / <OTHER_LLM_API_KEY>
