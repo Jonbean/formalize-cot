@@ -1,0 +1,114 @@
+[
+    [
+        {
+            "index": 0,
+            "text": "The original price of an item is discounted 22%.",
+            "PIT": "premise",
+            "amr": "(d / discount-02\n    :ARG1 (m / monetary-quantity\n        :ARG2-of (p / price-01\n            :ARG1 (i / item))\n        :mod (o / original))\n    :ARG2 (p2 / percentage-entity\n        :value 22))"
+        },
+        {
+            "index": 1,
+            "text": "A customer buys the item at this discounted price using a $20-off coupon.",
+            "PIT": "premise",
+            "amr": "(b / buy-01\n    :ARG0 (c / customer)\n    :ARG1 (i / item)\n    :ARG3 (m / monetary-quantity\n        :ARG2-of (p / price-01)\n        :ARG1-of (d / discount-01)\n        :mod (t / this))\n    :manner (u / use-01\n        :ARG0 c\n        :ARG1 (c2 / coupon\n            :mod (o / off\n                :quant (m2 / monetary-quantity\n                    :quant 20\n                    :unit (d2 / dollar)))\n            :mod o)))"
+        },
+        {
+            "index": 2,
+            "text": "There is no tax on the item, and this was the only item the customer bought.",
+            "PIT": "premise",
+            "amr": "(a / and\n    :op1 (t / tax-01\n        :polarity -\n        :ARG3 (i / item))\n    :op2 (i2 / item\n        :mod (o / only)\n        :ARG1-of (b / buy-01\n            :ARG0 (c / customer))\n        :domain i))"
+        },
+        {
+            "index": 3,
+            "text": "The customer paid $1.90 more than half the original price of the item.",
+            "PIT": "premise",
+            "amr": "(p / pay-01\n    :ARG0 (c / customer)\n    :ARG1 (m / monetary-quantity\n        :quant \"1.90\"\n        :unit (d / dollar)\n        :quant (m2 / more-than\n            :op1 (h / half\n                :ARG3-of (i / include-91\n                    :ARG1 m\n                    :ARG2 (t / thing\n                        :ARG2-of (p2 / price-01\n                            :ARG1 (i2 / item))\n                        :mod (o / original)))\n                :ARG1-of (m3 / mean-01\n                    :ARG2 p2)))))"
+        },
+        {
+            "index": 4,
+            "text": "What was the original price of the item?",
+            "PIT": "question",
+            "amr": "(p / price-01\n    :ARG1 (i / item)\n    :ARG2 (a / amr-unknown)\n    :mod (o / original))"
+        },
+        {
+            "index": 5,
+            "text": "Let x be the original price of the item.",
+            "PIT": "new definition",
+            "amr": "(p / price-01\n    :mode imperative\n    :ARG0 (y / you)\n    :ARG1 (i / item)\n    :ARG2 (m / monetary-quantity\n        :quant (v / variable\n            :wiki -\n            :name (n / name\n                :op1 \"x\")))\n    :mod (o / original))"
+        },
+        {
+            "index": 6,
+            "text": "Discounted price = 0.78x.",
+            "PIT": "lemma",
+            "amr": "(e / equal-01\n    :ARG1 (m / monetary-quantity\n        :ARG2-of (p / price-01)\n        :ARG1-of (d / discount-01))\n    :ARG2 (p2 / product-of\n        :op1 \"0.78\"))"
+        },
+        {
+            "index": 7,
+            "text": "Payment made by the customer after using the $20 coupon = 0.78x - 20.",
+            "PIT": "lemma",
+            "amr": "(e / equal-01\n    :ARG1 (m / monetary-quantity\n        :ARG1-of (p / pay-01\n            :ARG0 (c / customer)\n            :time (a / after\n                :op1 (u / use-01\n                    :ARG0 c\n                    :ARG1 (c2 / coupon\n                        :mod (m2 / monetary-quantity\n                            :quant 20\n                            :unit (d / dollar))\n                        :mod (v / value-interval\n                            :op1 \"0.78\"\n                            :op2 20))))\n            :ARG2 (p2 / product-of\n                :op1 \"0.20\"))))"
+        },
+        {
+            "index": 8,
+            "text": "0.78x - 20 = x/2 + 1.9.",
+            "PIT": "lemma",
+            "amr": "(e / equal-01\n    :ARG1 (p / product-of\n        :op1 \"0.78\"\n        :op2 20)\n    :ARG2 (v / value-interval\n        :op1 \"x/2\"\n        :op2 \"1.9\"))"
+        },
+        {
+            "index": 9,
+            "text": "Solving this gives x = 78.20.",
+            "PIT": "conclusion",
+            "amr": "(g / give-01\n    :ARG0 (s / solve-01\n        :ARG1 (t / this))\n    :ARG1 (e / equal-01\n        :ARG1 (v / variable\n            :wiki -\n            :name (n / name\n                :op1 \"x\"))\n        :ARG2 \"78.20\"))"
+        },
+        {
+            "index": 10,
+            "text": "The answer is 78.20 (Option E).",
+            "PIT": "conclusion",
+            "amr": "(a / answer-01\n    :ARG2 (s / score-on-scale-91\n        :ARG1 \"78.20\"\n        :ARG3 \"E\"\n        :ARG1-of (o / opt-01)))"
+        }
+    ],
+    [
+        {
+            "index": 0,
+            "text": "Find out which of the following values is the multiple of X, if it is divisible by 9 and 12?",
+            "PIT": "question",
+            "amr": "(f / find-out-03\n    :mode imperative\n    :ARG0 (y / you)\n    :ARG1 (m / multiple\n        :op1 (v / variable\n            :wiki -\n            :name (n / name\n                :op1 \"X\"))\n        :domain (a / amr-unknown\n            :ARG1-of (i / include-91\n                :ARG2 (v2 / value\n                    :ARG1 (f2 / follow-04\n                        :ARG1 (d2 / divvy-01\n                            :ARG2 t\n                            :ARG1 (i2 / it)))))\n            :mod (a2 / amr-unknown))\n        :condition (p / possible-01\n            :ARG1 (d / divvy-up-01\n                :ARG1 a\n                :ARG2 (a3 / and\n                    :op1 (v3 / variable\n                        :wiki \"9/12\"\n                        :name (n2 / name\n                            :op1 9\n                            :op2 12))\n                    :op2 (t / thing\n                        :wiki \"12/12/16\"\n                        :name n\n                        :name (n3 / name\n                            :op1 12\n                            :op2 9\n                            :op3 12))\n                    :ARG2 a3)))))"
+        },
+        {
+            "index": 1,
+            "text": "9 = 3 \u00d7 3.",
+            "PIT": "lemma",
+            "amr": "(e / equal-01\n    :ARG1 (h / have-quant-91\n        :ARG2 9)\n    :ARG2 (e2 / equal-01\n        :ARG1 3\n        :ARG2 3))"
+        },
+        {
+            "index": 2,
+            "text": "12 = 3 \u00d7 4.",
+            "PIT": "lemma",
+            "amr": "(e / equal-01\n    :ARG1 (h / have-quant-91\n        :ARG2 12)\n    :ARG2 (p / product-of\n        :op1 3\n        :op2 4))"
+        },
+        {
+            "index": 3,
+            "text": "The number should definitely have these factors 3 \u00d7 3 \u00d7 4.",
+            "PIT": "lemma",
+            "amr": "(r / recommend-01\n    :ARG1 (h / have-03\n        :ARG0 (n / number)\n        :ARG1 (f / factor\n            :mod (t / this)\n            :quant (v / value-interval\n                :op1 3\n                :op2 3\n                :op3 4))\n        :mod (d / definite)))"
+        },
+        {
+            "index": 4,
+            "text": "36 is the number that has these factors.",
+            "PIT": "lemma",
+            "amr": "(h / have-03\n    :ARG0 (n / number\n        :quant 36)\n    :ARG1 (f / factor\n        :mod (t / this)))"
+        },
+        {
+            "index": 5,
+            "text": "So, 36 is the multiple of X.",
+            "PIT": "conclusion",
+            "amr": "(e / equal-01\n    :ARG1 36\n    :ARG2 (m / multiple\n        :op1 (v / variable\n            :wiki -\n            :name (n / name\n                :op1 \"X\")))\n    :ARG1-of (i / infer-01))"
+        },
+        {
+            "index": 6,
+            "text": "The answer is A (36).",
+            "PIT": "conclusion",
+            "amr": "(a / answer-01\n    :ARG2 (v / variable\n        :wiki -\n        :name (n / name\n            :op1 \"A\"))\n    :ARG1-of (d / describe-01\n        :ARG0 (c / cite-01\n            :ARG2 36)))"
+        }
+    ]
+]
