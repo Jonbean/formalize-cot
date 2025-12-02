@@ -1,0 +1,37 @@
+# Podman/Docker Compose file for Formalize-CoT
+# Usage: podman-compose up -d
+# Or: docker-compose up -d
+
+version: "3.8"
+
+services:
+  formalize-cot:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: formalize-cot:latest
+    container_name: formalize-cot
+    
+    # Mount current directory to /workspace
+    volumes:
+      - .:/workspace:z
+      # Persist Lean toolchains between container restarts
+      - lean-elan:/root/.elan
+    
+    # Environment variables for API keys
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+    
+    # Working directory inside container
+    working_dir: /workspace
+
+volumes:
+  lean-elan:
+    driver: local
+

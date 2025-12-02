@@ -138,6 +138,25 @@ Typical fields in configs/prover_default.yaml:
 
 ⸻
 
+## 5.3 Container Setup (Portable Environment)
+
+For a portable, reproducible environment, use the Podman/Docker container:
+
+```bash
+# Build the container
+./container-run.sh build
+
+# Run interactive shell
+./container-run.sh run
+
+# Or run specific commands
+./container-run.sh exec python translators/amr2lean/amr2lean.py --help
+```
+
+See [CONTAINER.md](CONTAINER.md) for detailed container documentation.
+
+⸻
+
 6. Post-Processing & Analysis
 
 
