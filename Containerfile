@@ -36,10 +36,11 @@ COPY requirements.txt /workspace/requirements.txt
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Clone and install AMRToolBox
+# Clone and install AMRToolBox (optional - may fail if repo is private)
+# If this fails, you can mount AMRToolBox as a volume later
 RUN git clone https://github.com/Jonbean/AMRToolBox.git /opt/AMRToolBox && \
     cd /opt/AMRToolBox && \
-    pip install -e .
+    pip install -e . || echo "AMRToolBox installation skipped - clone manually if needed"
 
 # Install Lean via lean_interact's install-lean command
 RUN install-lean || echo "Lean installation will complete on first use"

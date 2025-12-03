@@ -1,0 +1,49 @@
+# Container ignore file (works for both Podman and Docker)
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+sftp-config.json
+.env
+*.log
+
+# Container files (don't copy into themselves)
+Containerfile
+Dockerfile
+container-compose.yml
+docker-compose.yml
+.containerignore
+.dockerignore
+
+# Large data directories (mount instead)
+# Uncomment if you want to exclude these from the build
+# data/
+# outputs/
+
