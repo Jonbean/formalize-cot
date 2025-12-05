@@ -27,6 +27,82 @@ def import_all_from_module(module_name):
                      for name in dir(module) 
                      if not name.startswith('_')})
 
+# --------------------------------------------------------------------------- #
+#  Structure Dependency Sorting Helpers
+# --------------------------------------------------------------------------- #
+def _extract_struct_dependencies(struct_name: str, struct_body: str, all_struct_names: Set[str]) -> Set[str]:
+    """
+    Extract which other structures this structure depends on based on field types.
+    Returns a set of structure names that appear as types in the struct body.
+    """
+    deps = set()
+    # Pattern to find types in field definitions: (fieldname : Option TypeName) or (fieldname : TypeName)
+    type_pattern = re.compile(r':\s*(?:Option\s+)?(\w+)')
+    
+    for match in type_pattern.finditer(struct_body):
+        type_name = match.group(1)
+        # Check if this type is one of our custom structures
+        if type_name in all_struct_names and type_name != struct_name:
+            deps.add(type_name)
+    
+    return deps
+
+def _topological_sort_structs(structs: Dict[str, str]) -> List[str]:
+    """
+    Topologically sort structure definitions so that dependencies come before dependents.
+    Returns list of struct names in the correct order.
+    """
+    if not structs:
+        return []
+    
+    all_names = set(structs.keys())
+    
+    # Build dependency graph
+    deps = {}  # struct_name -> set of struct_names it depends on
+    for name, body in structs.items():
+        deps[name] = _extract_struct_dependencies(name, body, all_names)
+    
+    # Kahn's algorithm for topological sort
+    # Count incoming edges (how many structs depend on each struct)
+    in_degree = {name: 0 for name in all_names}
+    for name, dependencies in deps.items():
+        for dep in dependencies:
+            # dep is depended upon by name, but we need reverse: name depends on dep
+            pass
+    
+    # Reverse: for each struct, count how many other structs list it as a dependency
+    reverse_deps = defaultdict(set)  # struct -> set of structs that depend on it
+    for name, dependencies in deps.items():
+        for dep in dependencies:
+            reverse_deps[dep].add(name)
+            in_degree[name] += 1  # name has one more incoming edge (it depends on dep)
+    
+    # Actually we need to recalculate in_degree properly
+    in_degree = {name: len(deps[name]) for name in all_names}
+    
+    # Start with structs that have no dependencies
+    queue = deque([name for name, deg in in_degree.items() if deg == 0])
+    sorted_names = []
+    
+    while queue:
+        current = queue.popleft()
+        sorted_names.append(current)
+        
+        # For each struct that depends on current, decrease its in_degree
+        for dependent in reverse_deps[current]:
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
+    
+    # Check for cycles (if we couldn't sort all structs)
+    if len(sorted_names) != len(all_names):
+        # Fall back to original order for structs involved in cycles
+        remaining = [name for name in structs.keys() if name not in sorted_names]
+        sorted_names.extend(remaining)
+        print(f"Warning: Circular dependencies detected in structures: {remaining}")
+    
+    return sorted_names
+
 
 
 def _is_noun_lemma(lemma: str) -> bool:
@@ -79,31 +155,20 @@ class LeanModule:
         self.roles_inventory.update(new_inventory)
 
     def render(self) -> str:
-        # if self.import_semantic_gadgets:
-        #     parts = [
-        #         "import AMRGadgets",
-        #         *self.inductives.values(),
-        #         "", *self.structs.values(),
-        #         "", *self.axioms
-        #         ]
-        # else:            
-        #     parts = [
-        #         ROLE_PREDS.format(roles=", ".join(list(self.roles_inventory))),
-        #         "",
-        #         *self.inductives.values(),
-        #         "", *self.structs.values(),
-        #         "", *self.axioms
-        #         ]
-        # return "\n\n".join(parts)
+        # Topologically sort structures so dependencies come before dependents
+        sorted_struct_names = _topological_sort_structs(self.structs)
+        sorted_structs = [self.structs[name] for name in sorted_struct_names]
+        
         # boilerplate always first
+        roles_list = [r for r in self.roles_inventory if r]
         header = [
-            ROLE_PREDS.format(roles=", ".join(list(self.roles_inventory))),
+            ROLE_PREDS.format(roles=", ".join(roles_list)),
             *self.inductives.values(),
-            "", *self.structs.values(),
+            "", *sorted_structs,
             "", *self.noncore_axioms,
         ]
 
-        # if we’ve recorded an explicit order, use it; otherwise fall back to old per-kind blocks
+        # if we've recorded an explicit order, use it; otherwise fall back to old per-kind blocks
         if self.ordered_decls:
             parts = header + [""] + self.ordered_decls
         else:
@@ -620,7 +685,7 @@ class AMR2LeanTranslator:
         # pad every missing type‐param with "Unit"
         parts = []
         for _ in idxs:
-            # look up a known concrete type (if stored one), otherwise "Unit"
+            # look up a known concrete type (if you stored one), otherwise "Unit"
             # but since we now saturate **in** _lean_type_of, it's fine to always "Unit"
             parts.append("_")  
         # replace those "_" with actual Units?  or better, skip and do:
@@ -759,7 +824,7 @@ class AMR2LeanTranslator:
                 # if cc.meta['category'] in ['float', 'int']:
                 #     filled_roles[crel_] = cc.text
                 # else:
-                filled_roles[crel_] = f'"{cc.text}"'
+                filled_roles[crel_] = f'"{self._escape(cc.text)}"'
         spec_ent_fields = []
         for fname, fvalue in filled_roles.items():
             if fvalue != 'none':
@@ -781,8 +846,12 @@ class AMR2LeanTranslator:
     def _quantify(self, node, declared_vars, quant_lines, prop_lines, indent, quantifier):
         if self._pred_sig[node.var_name] != "String":
             quant_lines.append(f"{indent}{quantifier} {node.var_name} : {self._pred_sig[node.var_name]}")
-        
-            prop_lines.append(f'{indent}{node.var_name}.name = "{node.text}"')
+            
+            # Only add .name for standard types, not for special entities (which have their own structure)
+            # Special entity types match the node text (e.g. "ordinal_entity") or are in self.ent
+            is_special = self.ent.get(node.text) is not None
+            if not is_special:
+                prop_lines.append(f'{indent}{node.var_name}.name = "{self._escape(node.text)}"')
             declared_vars.add(node.var_name)        
 
     def _try_quantify(self, node, declared_vars, quant_lines, prop_lines, indent, quantifier):
@@ -839,11 +908,15 @@ class AMR2LeanTranslator:
                 new_let_bindings.append(let_binding)
         return new_let_bindings
 
+    def _escape(self, text: str) -> str:
+        if not text: return ""
+        return text.replace('\\', '\\\\').replace('"', '\\"')
+
     def norm_string(self, c_text):
         if c_text.startswith('"'):
             return c_text
         else:
-            return f'"{c_text}"'
+            return f'"{self._escape(c_text)}"'
 
     def _mk_event_axiom(self, root, level=1, root_named=False, declared_vars=None, visited_nodes=None):
             
@@ -887,7 +960,7 @@ class AMR2LeanTranslator:
             if rel == ":quant" and c.text in UNIVERSAL_QUANR:
                 # universal quantifier
                 continue 
-            if rel in [':plural', ':definite']:
+            if rel in [':plural', ':definite', ':wiki']:
                 # marker roles , not need to translate 
                 continue 
 
@@ -915,14 +988,27 @@ class AMR2LeanTranslator:
                 role_name = self._role_name_retrieve(roles_dict, rel)
                 inversed_role = False
        
-            if role_name is None:
-                # polarity_neg_flag = True
-                role_name = rel[1:]
+            if role_name == None:
+                 # polarity_neg_flag = True
+                 role_name = rel[1:]
+            if not role_name:
+                 if len(rel) > 1:
+                     role_name = rel[1:]
+                 else:
+                     role_name = "UNKNOWN_REL"
             print('inversed_role: ', inversed_role, '|', role_name, '|', rel)
             if role_name == "example":
                 role_name = "examples"
             # if not re.match(r'op\d', role_name):
-            self.M.roles_inventory.add(role_name.upper())
+            if not role_name:
+                 print('role_name is None, rel: ', rel)
+                 if len(rel) > 1:
+                     role_name = rel[1:]
+                 else:
+                     role_name = "UNKNOWN_REL"
+            
+            if role_name:
+                self.M.roles_inventory.add(role_name.upper())
             role_id = f"{root.var_name}_{c.var_name}"
             c_cat = c.meta['category']
 

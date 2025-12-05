@@ -19,7 +19,7 @@ class AMR2LeanBatch:
                  label_map: Dict[str, str] = None, include_nl_comment: bool = False):
         self.pb = propbank_catalog
         self.import_semantic_gadgets = import_semantic_gadgets
-        # default mapping (can override by passing label_map)
+        # default mapping (you can override by passing label_map)
         self.label_map = (label_map or {
             "premise": "axiom",
             "new definition": "axiom",

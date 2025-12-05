@@ -35,7 +35,7 @@ class AMR2LeanBatch:
           { "amr": <penman>,
             "label": <string>,         # maps to axiom/lemma/theorem
             "name": Optional[str],     # lean identifier suffix
-            "sid": Optional[str],      # AMR sentence id (if used by loader)
+            "sid": Optional[str],      # AMR sentence id (if used by your loader)
             "negate": Optional[bool],  # only used when kind == "theorem"
           }
         """

@@ -3,7 +3,7 @@
 from __future__ import annotations
 import re, textwrap, itertools
 from collections import defaultdict, OrderedDict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 
 
 from propbank_interface import PropbankCatalogue, Roleset
@@ -19,6 +19,166 @@ from lean_snippets import *
 from amr_patterns import *
 from utils import *
 import utils
+
+# --------------------------------------------------------------------------- #
+#  Structure Dependency Sorting Helpers
+# --------------------------------------------------------------------------- #
+def _extract_struct_dependencies(struct_name: str, struct_body: str, all_struct_names: Set[str]) -> Set[str]:
+    """
+    Extract which other structures this structure depends on based on field types.
+    Returns a set of structure names that appear as types in the struct body.
+    """
+    deps = set()
+    # Pattern to find types in field definitions: (fieldname : Option TypeName) or (fieldname : TypeName)
+    type_pattern = re.compile(r':\s*(?:Option\s+)?(\w+)')
+    
+    for match in type_pattern.finditer(struct_body):
+        type_name = match.group(1)
+        # Check if this type is one of our custom structures
+        if type_name in all_struct_names and type_name != struct_name:
+            deps.add(type_name)
+    
+    return deps
+
+def _find_strongly_connected_components(deps: Dict[str, Set[str]], all_names: Set[str]) -> List[List[str]]:
+    """
+    Find strongly connected components using Tarjan's algorithm.
+    Returns list of SCCs (each SCC is a list of struct names).
+    SCCs with more than one element indicate circular dependencies.
+    """
+    index_counter = [0]
+    stack = []
+    lowlinks = {}
+    index = {}
+    on_stack = {}
+    sccs = []
+    
+    def strongconnect(node):
+        index[node] = index_counter[0]
+        lowlinks[node] = index_counter[0]
+        index_counter[0] += 1
+        stack.append(node)
+        on_stack[node] = True
+        
+        for successor in deps.get(node, set()):
+            if successor in all_names:  # Only consider nodes that exist
+                if successor not in index:
+                    strongconnect(successor)
+                    lowlinks[node] = min(lowlinks[node], lowlinks[successor])
+                elif on_stack.get(successor, False):
+                    lowlinks[node] = min(lowlinks[node], index[successor])
+        
+        if lowlinks[node] == index[node]:
+            scc = []
+            while True:
+                successor = stack.pop()
+                on_stack[successor] = False
+                scc.append(successor)
+                if successor == node:
+                    break
+            sccs.append(scc)
+    
+    for node in all_names:
+        if node not in index:
+            strongconnect(node)
+    
+    return sccs
+
+
+def _topological_sort_structs(structs: Dict[str, str]) -> Tuple[List[str], List[str], List[List[str]]]:
+    """
+    Topologically sort structure definitions so that dependencies come before dependents.
+    Returns tuple of:
+    - List of struct names to emit BEFORE mutual blocks (don't depend on cycle members)
+    - List of struct names to emit AFTER mutual blocks (depend on cycle members)
+    - List of cycle groups (each group is a list of struct names forming a cycle)
+    """
+    if not structs:
+        return [], [], []
+    
+    all_names = set(structs.keys())
+    
+    # Build dependency graph
+    deps = {}  # struct_name -> set of struct_names it depends on
+    for name, body in structs.items():
+        deps[name] = _extract_struct_dependencies(name, body, all_names)
+    
+    # Find strongly connected components to detect cycles
+    sccs = _find_strongly_connected_components(deps, all_names)
+    
+    # SCCs with more than one node are cycles
+    cycle_groups = [scc for scc in sccs if len(scc) > 1]
+    cycle_nodes = set()
+    for group in cycle_groups:
+        cycle_nodes.update(group)
+    
+    # Split non-cycle nodes into those that depend on cycle members and those that don't
+    non_cycle_names = all_names - cycle_nodes
+    depends_on_cycle = set()
+    no_cycle_deps = set()
+    
+    for name in non_cycle_names:
+        if deps.get(name, set()) & cycle_nodes:
+            # This struct depends on at least one cycle member
+            depends_on_cycle.add(name)
+        else:
+            no_cycle_deps.add(name)
+    
+    # Topological sort for structs that don't depend on cycles (go BEFORE mutual blocks)
+    reverse_deps_before = defaultdict(set)
+    for name in no_cycle_deps:
+        for dep in deps.get(name, set()):
+            if dep in no_cycle_deps:
+                reverse_deps_before[dep].add(name)
+    
+    in_degree_before = {name: len(deps.get(name, set()) & no_cycle_deps) for name in no_cycle_deps}
+    queue = deque([name for name, deg in in_degree_before.items() if deg == 0])
+    before_mutual = []
+    
+    while queue:
+        current = queue.popleft()
+        before_mutual.append(current)
+        for dependent in reverse_deps_before[current]:
+            in_degree_before[dependent] -= 1
+            if in_degree_before[dependent] == 0:
+                queue.append(dependent)
+    
+    # Safety net: add any remaining no_cycle_deps structs
+    for name in no_cycle_deps:
+        if name not in before_mutual:
+            before_mutual.append(name)
+    
+    # Topological sort for structs that depend on cycles (go AFTER mutual blocks)
+    # For these, we consider all non-cycle dependencies (both before and after)
+    reverse_deps_after = defaultdict(set)
+    for name in depends_on_cycle:
+        for dep in deps.get(name, set()):
+            if dep in depends_on_cycle:
+                reverse_deps_after[dep].add(name)
+    
+    # in_degree for after_mutual: count deps that are in depends_on_cycle set
+    in_degree_after = {name: len(deps.get(name, set()) & depends_on_cycle) for name in depends_on_cycle}
+    queue = deque([name for name, deg in in_degree_after.items() if deg == 0])
+    after_mutual = []
+    
+    while queue:
+        current = queue.popleft()
+        after_mutual.append(current)
+        for dependent in reverse_deps_after[current]:
+            in_degree_after[dependent] -= 1
+            if in_degree_after[dependent] == 0:
+                queue.append(dependent)
+    
+    # Safety net: add any remaining depends_on_cycle structs
+    for name in depends_on_cycle:
+        if name not in after_mutual:
+            after_mutual.append(name)
+    
+    if cycle_groups:
+        print(f"Warning: Circular dependencies detected. Wrapping in mutual blocks: {cycle_groups}")
+        print(f"  Structs before mutual: {len(before_mutual)}, after mutual: {len(after_mutual)}")
+    
+    return before_mutual, after_mutual, cycle_groups
 
 def _is_noun_lemma(lemma: str) -> bool:
     if lemma in ALWAYS_ENTITY:  return True
@@ -72,18 +232,36 @@ class LeanModule:
         self.roles_inventory.update(new_inventory)
 
     def render(self) -> str:
+        # Topologically sort structures so dependencies come before dependents
+        before_mutual, after_mutual, cycle_groups = _topological_sort_structs(self.structs)
+        structs_before = [self.structs[name] for name in before_mutual]
+        structs_after = [self.structs[name] for name in after_mutual]
+        
+        # Handle mutually recursive structures
+        mutual_blocks = []
+        for cycle_group in cycle_groups:
+            mutual_block = "mutual\n"
+            for name in cycle_group:
+                mutual_block += self.structs[name] + "\n\n"
+            mutual_block += "end"
+            mutual_blocks.append(mutual_block)
+        
         if self.import_semantic_gadgets:
             parts = [
                 "import AMRGadgets",
                 *self.inductives.values(),
-                "", *self.structs.values(),
+                "", *structs_before,
+                *mutual_blocks,
+                *structs_after,
                 "", *self.noncore_axioms,
                 "", *self.axioms,
                 ]
         else:            
             parts = [
                 *self.inductives.values(),
-                "", *self.structs.values(),
+                "", *structs_before,
+                *mutual_blocks,
+                *structs_after,
                 "", *self.noncore_axioms,
                 "", *self.axioms,
                 
@@ -111,8 +289,24 @@ class LeanModule:
             new_theorems = [re.sub(r'^(\s*)axiom\s+([^\s:]+)(\s*:)', r'\1theorem \2_t\3', axiom, flags=re.MULTILINE)+':= by\n sorry' for axiom in self.axioms]
 
         theorem_str = "\n\n".join(new_theorems)
+        # Topologically sort structures so dependencies come before dependents
+        before_mutual, after_mutual, cycle_groups = _topological_sort_structs(self.structs)
+        structs_before = [self.structs[name] for name in before_mutual]
+        structs_after = [self.structs[name] for name in after_mutual]
+        
+        # Handle mutually recursive structures
+        mutual_blocks = []
+        for cycle_group in cycle_groups:
+            mutual_block = "mutual\n"
+            for name in cycle_group:
+                mutual_block += self.structs[name] + "\n\n"
+            mutual_block += "end"
+            mutual_blocks.append(mutual_block)
+        
         parts = [
-            "", *self.structs.values(),
+            "", *structs_before,
+            *mutual_blocks,
+            *structs_after,
             "", *self.noncore_axioms,
             theorem_str
             ]
@@ -152,11 +346,29 @@ class LeanModule:
         if self.import_semantic_gadgets:
             parts.append("import AMRGadgets")
 
-        # inductives then structs
+        # inductives then structs (topologically sorted to respect type dependencies)
         parts.extend(self.inductives.values())
         if self.structs:
             parts.append("")
-            parts.extend(self.structs.values())
+            # Topologically sort structures so dependencies come before dependents
+            before_mutual, after_mutual, cycle_groups = _topological_sort_structs(self.structs)
+            
+            # First emit structures that don't depend on cycle members
+            for name in before_mutual:
+                parts.append(self.structs[name])
+            
+            # Then emit cycle groups wrapped in mutual blocks
+            for cycle_group in cycle_groups:
+                mutual_block = "mutual\n"
+                for name in cycle_group:
+                    struct_def = self.structs[name]
+                    mutual_block += struct_def + "\n\n"
+                mutual_block += "end"
+                parts.append(mutual_block)
+            
+            # Finally emit structures that depend on cycle members
+            for name in after_mutual:
+                parts.append(self.structs[name])
 
         # dedupe non-core axioms while preserving order
         if self.noncore_axioms:
@@ -457,13 +669,16 @@ class AMR2LeanTranslator:
         for c, rel_ in node.children.items():
             rel = rel_.lower()
             inversed_role = False
+            # Check against avoid_rels BEFORE stripping -of, since :quant-of is different from :quant
+            # For special entities, :quant is a structure field but :quant-of is a semantic relation
+            if rel in avoid_rels:
+                continue
             if rel.endswith('-of') and rel not in OF_SPECIAL_ROLE:
                 rel = rel[:-3]
                 inversed_role = True
             if not (rel.startswith(':arg') 
                 or (rel in INDICATOR_NONCORE_RELS)
-                or node.text in CONNECTOR
-                or rel in avoid_rels):
+                or node.text in CONNECTOR):
                 norm_rel = NON_CORE_EDGES.get(rel, rel[1:].replace('-', ''))
 
                 c_var = c.var_name.replace('-', '_')
@@ -531,96 +746,100 @@ class AMR2LeanTranslator:
     def _emit_types(self):
         etc_nodes = []
 
+        # ============== PASS 1: Set all _pred_sig entries first ==============
+        # This ensures that when we generate structures/axioms, all type signatures are available
         for n in self.node_order:
-            print('-----------emit-types------------')
-
             node_cat = n.meta['category']
-            print('n.var_name: ', n.var_name, '|n.text: ', n.text, '|ncat: ', node_cat)
-            # ---------- connector lemmas ----------
+            
             if n.text.strip() == "et-cetera":
                 etc_nodes.append(n)
-                print('etc n.text: ', n.text)
 
             if node_cat == 'compound-ent':
-                # check how many ops 
-                total_ops = 0
-                for child, op_rel in n.children.items():
-                    total_ops += 1
-
+                total_ops = sum(1 for _ in n.children.items())
                 type_sig_str = f"Connector{total_ops}_{n.var_name}"
                 self._pred_sig[n.var_name] = type_sig_str
-                # M.tructs should be ready if the topological sort ordering is correct.
-                ops = []
-                realized_vars = []
-                for child, rel in n.children.items():
-                    if rel.startswith(':op'):
-                        op_type = self._pred_sig.get(child.var_name, self._node_norm_name(child))
 
-                        child_val = self._type_dependent_arg_value(op_type, child)
-
-                        ops.append((rel[1:].lower(), op_type, child_val))
-
-
-
-                arguments = "\n".join(['  '+key+' : '+arg_type for key, arg_type, arg_val in ops])
-                realized_r_vars = {key: arg_val for key, arg_type, arg_val in ops}
-                # self.M.structs[type_sig_str] = self._mk_generic_struct(type_sig_str, arguments)
-                self.M.structs[type_sig_str] = GENERIC_STRUCT_TMPL.format(name=type_sig_str, fields=arguments)
-                self.struct_arg_order[n.var_name] = realized_r_vars
-
-                continue
-            
-
-            # for all predicate nodes, we generate structures to hold data
-            if node_cat == 'predicate' or node_cat == 'special-frame':
+            elif node_cat == 'predicate' or node_cat == 'special-frame':
                 parts = n.text.rsplit('-', 1)
                 lemma, sense = parts + [''] * (2 - len(parts))
                 key = f"{lemma.replace('-','_')}_{sense}_{n.var_name}" 
-                
                 self._pred_sig[n.var_name] = key
-                # M.structs may not be ready, wait until the we resolved all of the simple types 
 
-                self._mk_pred_struct(key, n)
-                self.M.noncore_axioms += self._mk_noncore_axioms(key, n)
-
-            else:
-                # not a predicates or special frame, then, it could be noun nodes or special entity node or prep node
+            elif node_cat == 'special-entity':
                 norm_name = n.text.replace('-', '_')+'_'+n.var_name
-                
-                if node_cat == 'special-entity':
-                    # --- declare fixed-field structure once
-                    spec_ent = self.ent.get(n.text)
+                self._pred_sig[n.var_name] = norm_name
 
-                    if norm_name not in self.M.structs:
-                        self.M.structs[norm_name] = self._mk_spec_entity_struct(norm_name, spec_ent)
-                        # M.structs is ready since spec_entity children are all terminal pr constant, wait until the we resolved all of the simple types 
-                        self.node_type[n.var_name] = norm_name
-                    self._pred_sig[n.var_name] = norm_name
-                    # ({f.role[1:]} : Option {f.ty})" for f in spec_ent)
-                    avoid_roles = [f.role for f in spec_ent]
-                    self.M.noncore_axioms += self._mk_noncore_axioms(norm_name, n, avoid_rels=avoid_roles)
+            elif node_cat in ['string', 'attribute']:
+                self._pred_sig[n.var_name] = "String"
+            elif node_cat in ['float', 'int']:
+                self._pred_sig[n.var_name] = "Float"
+            elif node_cat in ['term-noun', 'inter-noun', 'term-other']:
+                self._pred_sig[n.var_name] = "Entity"
+            elif node_cat in ['inter-prep-mod', 'inter-mod']:
+                self._pred_sig[n.var_name] = "Prep"
+            else:
+                self._pred_sig[n.var_name] = "String"
 
-                elif node_cat == ['string', 'attribute']:
-                    self._pred_sig[n.var_name] = "String"
-                elif node_cat in ['float', 'int']:
-                    self._pred_sig[n.var_name] = "Float"
-                elif node_cat in ['term-noun', 'inter-noun', 'term-other']:
-                    self._pred_sig[n.var_name] = "Entity"
-                    self.M.noncore_axioms += self._mk_noncore_axioms(norm_name, n)
-                elif node_cat in ['inter-prep-mod', 'inter-mod']:
-                    self._pred_sig[n.var_name] = "Prep"
-                    self.M.noncore_axioms += self._mk_noncore_axioms(norm_name, n)
-                else:
-                    self._pred_sig[n.var_name] = "String"
-
-
-        
-        # second pass to re-decide et-cetera node
-        
+        # Handle et-cetera nodes (needs other nodes' signatures to be set)
         for etcn in etc_nodes:
             self._handle_etc(etcn)
             print('etcn.var_name: ', etcn.var_name, '|etcn.text: ', etcn.text)
             print('self._pred_sig[etcn.var_name]: ', self._pred_sig[etcn.var_name])
+
+        # ============== PASS 2: Generate structures and axioms ==============
+        # Now all _pred_sig entries are set, so type resolution will be accurate
+        for n in self.node_order:
+            print('-----------emit-types (pass 2)------------')
+
+            node_cat = n.meta['category']
+            print('n.var_name: ', n.var_name, '|n.text: ', n.text, '|ncat: ', node_cat)
+
+            if node_cat == 'compound-ent':
+                type_sig_str = self._pred_sig[n.var_name]
+                # Use dict to avoid duplicate field names (can happen with malformed AMR)
+                ops_dict = {}
+                for child, rel in n.children.items():
+                    if rel.startswith(':op'):
+                        op_type = self._pred_sig.get(child.var_name, self._node_norm_name(child))
+                        child_val = self._type_dependent_arg_value(op_type, child)
+                        # Replace hyphens with underscores to make valid Lean identifiers
+                        op_key = rel[1:].lower().replace('-', '_')
+                        # Only keep first occurrence if duplicate (or could merge logic)
+                        if op_key not in ops_dict:
+                            ops_dict[op_key] = (op_type, child_val)
+
+                # Sort by op number to ensure consistent ordering (op1, op2, op3, ...)
+                def extract_op_num(key):
+                    num_part = key.replace('op', '').split('_')[0]
+                    return int(num_part) if num_part.isdigit() else 999
+                sorted_ops = sorted(ops_dict.items(), key=lambda x: extract_op_num(x[0]))
+                
+                arguments = "\n".join([f'  {key} : {arg_type}' for key, (arg_type, arg_val) in sorted_ops])
+                realized_r_vars = {key: arg_val for key, (arg_type, arg_val) in sorted_ops}
+                self.M.structs[type_sig_str] = GENERIC_STRUCT_TMPL.format(name=type_sig_str, fields=arguments)
+                self.struct_arg_order[n.var_name] = realized_r_vars
+                continue
+
+            if node_cat == 'predicate' or node_cat == 'special-frame':
+                key = self._pred_sig[n.var_name]
+                self._mk_pred_struct(key, n)
+                self.M.noncore_axioms += self._mk_noncore_axioms(key, n)
+
+            else:
+                norm_name = n.text.replace('-', '_')+'_'+n.var_name
+                
+                if node_cat == 'special-entity':
+                    spec_ent = self.ent.get(n.text)
+                    if norm_name not in self.M.structs:
+                        self.M.structs[norm_name] = self._mk_spec_entity_struct(norm_name, spec_ent)
+                        self.node_type[n.var_name] = norm_name
+                    avoid_roles = [f.role for f in spec_ent]
+                    self.M.noncore_axioms += self._mk_noncore_axioms(norm_name, n, avoid_rels=avoid_roles)
+
+                elif node_cat in ['term-noun', 'inter-noun', 'term-other']:
+                    self.M.noncore_axioms += self._mk_noncore_axioms(norm_name, n)
+                elif node_cat in ['inter-prep-mod', 'inter-mod']:
+                    self.M.noncore_axioms += self._mk_noncore_axioms(norm_name, n)
 
 
     # ------------------------------------------------------------------ #
@@ -630,11 +849,15 @@ class AMR2LeanTranslator:
         field_lines = "\n".join(f"  ({f.role[1:]} : Option {f.ty})" for f in spec_ent)
         return SPECIAL_ENTITY_TMPL.format(name=spec_ent_name, fields=field_lines)
 
+    def _escape(self, text: str) -> str:
+        if not text: return ""
+        return text.replace('\\', '\\\\').replace('"', '\\"')
+
     def norm_string(self, c_text):
         if c_text.startswith('"'):
             return c_text
         else:
-            return f'"{c_text}"'
+            return f'"{self._escape(c_text)}"'
 
     def _type_dependent_arg_value(self, lean_type, node):
         # if lean_type == "String":
@@ -647,21 +870,25 @@ class AMR2LeanTranslator:
     def _roleset_construction(self, node):
         idx_set = {}
    
+        # Direct :argN relations from children
         for cn, rel in node.children.items():
             m = re.match(r"^:arg(\d+)$", rel, re.I)
             if m:
                 pred_sig = self._pred_sig.get(cn.var_name, self._node_norm_name(cn))
-                
                 arg_value = self._type_dependent_arg_value(pred_sig, cn)
                 idx_set[rel[1:].lower()] = (pred_sig, arg_value)
 
-        # incoming :argk-of
+        # incoming :argk-of from parents (tree parents with -of relation)
+        # If parent P has relation :ARGk-of to this node N, then P fills N's argk
         for pn, rel in node.parents.items():
             m = re.match(r":arg(\d+)-of", rel, re.I)
             if m: 
                 pred_sig = self._pred_sig.get(pn.var_name, self._node_norm_name(pn))
                 arg_value = self._type_dependent_arg_value(pred_sig, pn)
-                idx_set[f'arg{int(m.group(1))}'] = (pred_sig, arg_value)
+                arg_key = f'arg{int(m.group(1))}'
+                # Only set if not already set by direct relation
+                if arg_key not in idx_set:
+                    idx_set[arg_key] = (pred_sig, arg_value)
                 
         return idx_set
 
@@ -735,22 +962,34 @@ class AMR2LeanTranslator:
 
         idx_set = self._roleset_construction(node)
         arg_lines = []
+        # Build set of valid arg indices for this special frame
+        spec_arg_indices = {f'arg{r.idx}' for r in spec_roles}
+        covered_args = set()
+        
+        # First, add all fields from the special frame spec
         for spec_role in spec_roles:
             arg_type = idx_set.get(f'arg{spec_role.idx}', ['Entity'])
             print('spec_frame_struct, arg_type : ', arg_type)
             arg_line = f"  (arg{spec_role.idx} : Option {arg_type[0]}) -- {spec_role.name}"
             arg_lines.append(arg_line)
+            covered_args.add(f'arg{spec_role.idx}')
+
+        # Check for AMR-specific args not in the special frame spec (like propbank does)
+        for arg_idx, arg_type_var in idx_set.items():
+            if arg_idx not in covered_args:
+                arg_line = f"  ({arg_idx} : Option {arg_type_var[0]}) -- AMR SPECIFIC"
+                arg_lines.append(arg_line)
 
         fields  = "\n".join(arg_lines)
 
-        # collects realized vars
+        # Collects realized vars - start with spec args set to 'none'
         realized_r_vars = {f'arg{r.idx}': 'none' for r in spec_roles}
+        
+        # Update with actual values from AMR (both spec args and AMR-specific args)
         for cn, arg_role in node.children.items():
             if arg_role.lower().startswith(':arg') and '-' not in arg_role:
                 real_arg_name = arg_role.lower()[1:]
-                # roles_types[real_arg_name] = f'Option {self._pred_sig[cn.var_name]}'
                 cn_type = self._pred_sig.get(cn.var_name, self._node_norm_name(cn))
-
                 realized_r_vars[real_arg_name] = f'some {self._type_dependent_arg_value(cn_type, cn)}'
 
         self.struct_arg_order[node.var_name] = realized_r_vars
@@ -862,10 +1101,7 @@ class AMR2LeanTranslator:
                 if cc.meta['category'] in ['float', 'int']:
                     filled_roles[crel_] = cc.text
                 else:
-                    norm_text = f'"{cc.text}"'
-                    if '"' in cc.text:
-                        norm_text = f'{cc.text}'
-                    filled_roles[crel_] = norm_text
+                    filled_roles[crel_] = f'"{self._escape(cc.text)}"'
         spec_ent_fields = []
         for fname, fvalue in filled_roles.items():
             if fvalue != 'none':
@@ -885,7 +1121,7 @@ class AMR2LeanTranslator:
     def _quantify(self, node, declared_vars, quant_lines, prop_lines, indent, quantifier):
         quant_lines.append(f"{indent}{quantifier} {node.var_name} : {self._pred_sig.get(node.var_name, self._node_norm_name(node))}")
         if self._pred_sig.get(node.var_name, self._node_norm_name(node)) in ['Entity', 'Prep']:
-            prop_lines.append(f'{indent}{node.var_name}.name = "{node.text}"')
+            prop_lines.append(f'{indent}{node.var_name}.name = "{self._escape(node.text)}"')
         declared_vars.add(node.var_name)        
 
     def _try_quantify(self, node, declared_vars, quant_lines, prop_lines, indent, quantifier):
