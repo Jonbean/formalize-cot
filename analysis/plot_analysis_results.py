@@ -686,422 +686,422 @@ def plot_dataset_comparison_by_method_before_after_extusage(dataset_data, ext_ch
     plt.close()
 
 
-def plot_external_usage_vs_success(dataset_data, external_check_file='amr_json_external_axiom_check_results_*.json', file_prefix='gemini', model_name='Gemini', method_name='AMR-Frame'):
-    """Plot relationship between average external-axiom usage and success rate per dataset.
+# def plot_external_usage_vs_success(dataset_data, external_check_file='amr_json_external_axiom_check_results_*.json', file_prefix='gemini', model_name='Gemini', method_name='AMR-Frame'):
+#     """Plot relationship between average external-axiom usage and success rate per dataset.
 
-    external_check_file: path to JSON produced by `amr_frame_json_check.py`.
-    dataset_data: dataset-level summary (contains 'datasets' mapping).
-    """
-    # Load external check results. Try to pick the file that matches this method
-    try:
-        if os.path.exists(external_check_file) and not ('*' in external_check_file or '?' in external_check_file):
-            ext_results = load_json(external_check_file)
-            chosen = external_check_file
-            print(f"Loaded external-check data from: {chosen}")
-        else:
-            files_map, chosen = _load_ext_results_for_method(method_hint=method_name or None, pattern=external_check_file)
-            if chosen:
-                ext_results = files_map[chosen]
-                print(f"Loaded external-check data from: {chosen}")
-            else:
-                print(f"Warning: no per-method external-check file found for '{method_name}'. Not merging files; cannot proceed.")
-                return
-    except Exception as e:
-        print(f"Warning: could not load external check file(s): {e}")
-        return
+#     external_check_file: path to JSON produced by `amr_frame_json_check.py`.
+#     dataset_data: dataset-level summary (contains 'datasets' mapping).
+#     """
+#     # Load external check results. Try to pick the file that matches this method
+#     try:
+#         if os.path.exists(external_check_file) and not ('*' in external_check_file or '?' in external_check_file):
+#             ext_results = load_json(external_check_file)
+#             chosen = external_check_file
+#             print(f"Loaded external-check data from: {chosen}")
+#         else:
+#             files_map, chosen = _load_ext_results_for_method(method_hint=method_name or None, pattern=external_check_file)
+#             if chosen:
+#                 ext_results = files_map[chosen]
+#                 print(f"Loaded external-check data from: {chosen}")
+#             else:
+#                 print(f"Warning: no per-method external-check file found for '{method_name}'. Not merging files; cannot proceed.")
+#                 return
+#     except Exception as e:
+#         print(f"Warning: could not load external check file(s): {e}")
+#         return
 
-    # Prepare dataset mapping
-    if isinstance(dataset_data, dict) and 'datasets' in dataset_data:
-        datasets = dataset_data['datasets']
-    else:
-        datasets = dataset_data
+#     # Prepare dataset mapping
+#     if isinstance(dataset_data, dict) and 'datasets' in dataset_data:
+#         datasets = dataset_data['datasets']
+#     else:
+#         datasets = dataset_data
 
-    # Initialize per-dataset lists
-    ds_file_vals = {k: [] for k in datasets.keys()}
+#     # Initialize per-dataset lists
+#     ds_file_vals = {k: [] for k in datasets.keys()}
 
-    # For each file in ext_results, compute average percent_of_externals_used across its original theorems
-    for path, info in ext_results.items():
-        ota = info.get('original_theorems_analysis', {})
-        details = ota.get('details', [])
-        if not details:
-            avg_pct = 0.0
-        else:
-            vals = [d.get('percent_of_externals_used', 0.0) for d in details]
-            avg_pct = float(np.mean(vals)) if vals else 0.0
+#     # For each file in ext_results, compute average percent_of_externals_used across its original theorems
+#     for path, info in ext_results.items():
+#         ota = info.get('original_theorems_analysis', {})
+#         details = ota.get('details', [])
+#         if not details:
+#             avg_pct = 0.0
+#         else:
+#             vals = [d.get('percent_of_externals_used', 0.0) for d in details]
+#             avg_pct = float(np.mean(vals)) if vals else 0.0
 
-        # assign to dataset by matching dataset key in file path
-        assigned = False
-        for ds_key in datasets.keys():
-            if f'/{ds_key}/' in path or ds_key in path:
-                ds_file_vals[ds_key].append(avg_pct)
-                assigned = True
-                break
-        if not assigned:
-            # try to find by dataset suffix (strip leading -)
-            for ds_key in datasets.keys():
-                if ds_key.strip('-') in path:
-                    ds_file_vals[ds_key].append(avg_pct)
-                    assigned = True
-                    break
+#         # assign to dataset by matching dataset key in file path
+#         assigned = False
+#         for ds_key in datasets.keys():
+#             if f'/{ds_key}/' in path or ds_key in path:
+#                 ds_file_vals[ds_key].append(avg_pct)
+#                 assigned = True
+#                 break
+#         if not assigned:
+#             # try to find by dataset suffix (strip leading -)
+#             for ds_key in datasets.keys():
+#                 if ds_key.strip('-') in path:
+#                     ds_file_vals[ds_key].append(avg_pct)
+#                     assigned = True
+#                     break
 
-    # Aggregate per-dataset statistics
-    ds_names = []
-    means = []
-    medians = []
-    stds = []
-    counts = []
-    success_rates = []
+#     # Aggregate per-dataset statistics
+#     ds_names = []
+#     means = []
+#     medians = []
+#     stds = []
+#     counts = []
+#     success_rates = []
 
-    for ds_key, ds_val in datasets.items():
-        vals = ds_file_vals.get(ds_key, [])
-        mean_ext = float(np.mean(vals)) if vals else 0.0
-        med_ext = float(np.median(vals)) if vals else 0.0
-        std_ext = float(np.std(vals, ddof=0)) if vals else 0.0
-        cnt = len(vals)
+#     for ds_key, ds_val in datasets.items():
+#         vals = ds_file_vals.get(ds_key, [])
+#         mean_ext = float(np.mean(vals)) if vals else 0.0
+#         med_ext = float(np.median(vals)) if vals else 0.0
+#         std_ext = float(np.std(vals, ddof=0)) if vals else 0.0
+#         cnt = len(vals)
 
-        total = ds_val.get('total_files', ds_val.get('total_examples', 0))
-        successes = ds_val.get('error_stats', {}).get('successes', ds_val.get('successes', 0))
-        success_rate = (successes / total * 100) if total > 0 else 0.0
+#         total = ds_val.get('total_files', ds_val.get('total_examples', 0))
+#         successes = ds_val.get('error_stats', {}).get('successes', ds_val.get('successes', 0))
+#         success_rate = (successes / total * 100) if total > 0 else 0.0
 
-        ds_names.append(ds_key.strip('-').upper())
-        means.append(mean_ext)
-        medians.append(med_ext)
-        stds.append(std_ext)
-        counts.append(cnt)
-        success_rates.append(success_rate)
+#         ds_names.append(ds_key.strip('-').upper())
+#         means.append(mean_ext)
+#         medians.append(med_ext)
+#         stds.append(std_ext)
+#         counts.append(cnt)
+#         success_rates.append(success_rate)
 
-    if not any(counts):
-        print("No external-check data found for the given dataset summary.")
-        return
+#     if not any(counts):
+#         print("No external-check data found for the given dataset summary.")
+#         return
 
-    # Compute correlation between mean external usage and success rate
-    corr = None
-    if len(means) >= 2:
-        try:
-            corr = np.corrcoef(means, success_rates)[0, 1]
-        except Exception:
-            corr = None
+#     # Compute correlation between mean external usage and success rate
+#     corr = None
+#     if len(means) >= 2:
+#         try:
+#             corr = np.corrcoef(means, success_rates)[0, 1]
+#         except Exception:
+#             corr = None
 
-    # Create a two-panel figure: scatter (mean vs success) + counts
-    fig = plt.figure(figsize=(14, 6))
-    gs = fig.add_gridspec(1, 2, width_ratios=[3, 1], wspace=0.3)
-    ax = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[0, 1])
+#     # Create a two-panel figure: scatter (mean vs success) + counts
+#     fig = plt.figure(figsize=(14, 6))
+#     gs = fig.add_gridspec(1, 2, width_ratios=[3, 1], wspace=0.3)
+#     ax = fig.add_subplot(gs[0, 0])
+#     ax2 = fig.add_subplot(gs[0, 1])
 
-    # Scatter with error bars (std) and marker size by count
-    sizes = [40 + c * 6 for c in counts]
-    ax.errorbar(means, success_rates, xerr=stds, fmt='o', markersize=8, color='#9b59b6', ecolor='gray', elinewidth=2, capsize=4)
-    ax.scatter(means, success_rates, s=sizes, color='#9b59b6', edgecolor='black')
+#     # Scatter with error bars (std) and marker size by count
+#     sizes = [40 + c * 6 for c in counts]
+#     ax.errorbar(means, success_rates, xerr=stds, fmt='o', markersize=8, color='#9b59b6', ecolor='gray', elinewidth=2, capsize=4)
+#     ax.scatter(means, success_rates, s=sizes, color='#9b59b6', edgecolor='black')
 
-    # Annotate with dataset labels and counts
-    for x_val, y_val, label, cnt in zip(means, success_rates, ds_names, counts):
-        ax.text(x_val, y_val, f' {label} (n={cnt})', fontsize=9, va='center')
+#     # Annotate with dataset labels and counts
+#     for x_val, y_val, label, cnt in zip(means, success_rates, ds_names, counts):
+#         ax.text(x_val, y_val, f' {label} (n={cnt})', fontsize=9, va='center')
 
-    # Trend line
-    if len(means) >= 2 and any(means):
-        try:
-            z = np.polyfit(means, success_rates, 1)
-            p = np.poly1d(z)
-            xs = np.linspace(min(means), max(means), 100)
-            ax.plot(xs, p(xs), linestyle='--', color='gray')
-        except Exception:
-            pass
+#     # Trend line
+#     if len(means) >= 2 and any(means):
+#         try:
+#             z = np.polyfit(means, success_rates, 1)
+#             p = np.poly1d(z)
+#             xs = np.linspace(min(means), max(means), 100)
+#             ax.plot(xs, p(xs), linestyle='--', color='gray')
+#         except Exception:
+#             pass
 
-    ax.set_xlabel('Average % of Externals Used in Theorems (mean)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Success Rate (%)', fontsize=12, fontweight='bold')
-    title = f'External Usage vs Success Rate ({model_name})'
-    if corr is not None:
-        title += f' — Pearson r = {corr:.2f}'
-    ax.set_title(title, fontsize=14, fontweight='bold')
-    ax.set_xlim(left=0)
-    ax.set_ylim(0, 110)
-    ax.grid(axis='y', alpha=0.3)
+#     ax.set_xlabel('Average % of Externals Used in Theorems (mean)', fontsize=12, fontweight='bold')
+#     ax.set_ylabel('Success Rate (%)', fontsize=12, fontweight='bold')
+#     title = f'External Usage vs Success Rate ({model_name})'
+#     if corr is not None:
+#         title += f' — Pearson r = {corr:.2f}'
+#     ax.set_title(title, fontsize=14, fontweight='bold')
+#     ax.set_xlim(left=0)
+#     ax.set_ylim(0, 110)
+#     ax.grid(axis='y', alpha=0.3)
 
-    # Right panel: counts (descending)
-    order = sorted(range(len(counts)), key=lambda i: counts[i], reverse=True)
-    count_vals = [counts[i] for i in order]
-    labels_ordered = [ds_names[i] for i in order]
-    ax2.barh(labels_ordered, count_vals, color='#3498db', edgecolor='black')
-    ax2.set_xlabel('Files with external-check data', fontsize=10, fontweight='bold')
-    ax2.set_title('Sample counts', fontsize=12, fontweight='bold')
+#     # Right panel: counts (descending)
+#     order = sorted(range(len(counts)), key=lambda i: counts[i], reverse=True)
+#     count_vals = [counts[i] for i in order]
+#     labels_ordered = [ds_names[i] for i in order]
+#     ax2.barh(labels_ordered, count_vals, color='#3498db', edgecolor='black')
+#     ax2.set_xlabel('Files with external-check data', fontsize=10, fontweight='bold')
+#     ax2.set_title('Sample counts', fontsize=12, fontweight='bold')
 
-    plt.tight_layout()
-    # include method_name in filename label
-    label = method_name if method_name else file_prefix
-    label = str(label).replace(' ', '_')
-    _savefig(f'./plots/10_{file_prefix}_external_usage_vs_success-{label}.png')
-    plt.close()
-
-
-def plot_external_usage_vs_success_multi(dataset_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='combined'):
-    """Plot external usage vs success rate across multiple methods/dataset files.
-
-    dataset_files: list of paths to enhanced_json_dataset_results_*.json files
-    ext_check_pattern: glob pattern to find json check result files (merged)
-    out_prefix: filename prefix for saved plot
-    """
-    # Load and merge all external check results
-    ext_results = {}
-    from glob import glob
-    ext_files = sorted(glob(ext_check_pattern))
-    for ef in ext_files:
-        try:
-            d = load_json(ef)
-            ext_results.update(d)
-        except Exception:
-            continue
-
-    # Collect points (avg_external_pct, success_rate, label, method)
-    xs = []
-    ys = []
-    labels = []
-    methods = []
-    counts = []
-    stds = []
-
-    for df in dataset_files:
-        try:
-            data = load_json(df)
-        except Exception:
-            continue
-
-        method_path = data.get('method_path', '')
-        method_seg = Path(method_path).name if method_path else Path(df).stem
-        method_label = data.get('method_name', method_seg)
-
-        datasets = data.get('datasets', {})
-        for ds_key, ds_val in datasets.items():
-            # gather per-file avg ext pct for files belonging to this method and dataset
-            per_file_vals = []
-            for path, info in ext_results.items():
-                # Determine whether this ext entry belongs to the current method by
-                # checking if the path exists under the method_path root (this works
-                # because per-method check outputs use relative paths when saved).
-                try:
-                    candidate = Path(method_path) / Path(path)
-                    belongs = candidate.exists()
-                except Exception:
-                    belongs = False
-
-                # Fallback: if candidate not found, try simple substring matching
-                if not belongs:
-                    if method_seg and method_seg in path:
-                        belongs = True
-
-                if not belongs:
-                    continue
-
-                # Ensure dataset key matches the path
-                if ds_key not in path and ds_key.strip('-') not in path:
-                    continue
-
-                details = info.get('original_theorems_analysis', {}).get('details', [])
-                if not details:
-                    continue
-                vals = [d.get('percent_of_externals_used', 0.0) for d in details]
-                if vals:
-                    per_file_vals.append(float(np.mean(vals)))
-
-            if not per_file_vals:
-                continue
-
-            avg_ext = float(np.mean(per_file_vals))
-            std_ext = float(np.std(per_file_vals)) if per_file_vals else 0.0
-            cnt = len(per_file_vals)
-            total = ds_val.get('total_files', ds_val.get('total_examples', 0))
-            successes = ds_val.get('error_stats', {}).get('successes', ds_val.get('successes', 0))
-            success_rate = (successes / total * 100) if total > 0 else 0.0
-
-            xs.append(avg_ext)
-            ys.append(success_rate)
-            labels.append(f"{method_label}:{ds_key.strip('-')}")
-            methods.append(method_label)
-            counts.append(cnt)
-            stds.append(std_ext)
-
-    if not xs:
-        print("No external-check data found for multi-method external usage plot.")
-        return
-
-    # Compute correlation
-    corr = None
-    if len(xs) >= 2:
-        try:
-            corr = np.corrcoef(xs, ys)[0, 1]
-        except Exception:
-            corr = None
-
-    # Scatter with color by method
-    unique_methods = sorted(set(methods))
-    method_colors = {m: plt.cm.tab10(i % 10) for i, m in enumerate(unique_methods)}
-
-    # Plot: scatter colored by method, size by sample count, x-error as std
-    fig, ax = plt.subplots(figsize=(12, 7))
-    for x_val, y_val, lbl, m, cnt, st in zip(xs, ys, labels, methods, counts, stds):
-        size = 40 + cnt * 6
-        # x-error = std of per-file means
-        ax.errorbar(x_val, y_val, xerr=st, fmt='o', markersize=6, color=method_colors[m], ecolor='gray', elinewidth=1.5, capsize=3)
-        ax.scatter(x_val, y_val, s=size, color=method_colors[m], edgecolor='black')
-        ax.text(x_val, y_val, f' {lbl} (n={cnt})', fontsize=9, va='center')
-
-    # trend line
-    if len(xs) >= 2 and any(xs):
-        z = np.polyfit(xs, ys, 1)
-        p = np.poly1d(z)
-        xs_line = np.linspace(min(xs), max(xs), 100)
-        ax.plot(xs_line, p(xs_line), linestyle='--', color='gray')
-
-    ax.set_xlabel('Average % of Externals Used in Theorems (per-file average)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Success Rate (%)', fontsize=12, fontweight='bold')
-    title = f'External Usage vs Success Rate (multi-method)'
-    if corr is not None:
-        title += f' — Pearson r = {corr:.2f}'
-    ax.set_title(title, fontsize=14, fontweight='bold')
-    ax.set_xlim(left=0)
-    ax.set_ylim(0, 110)
-    ax.grid(axis='y', alpha=0.3)
-
-    # legend
-    handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=method_colors[m], markersize=8, markeredgecolor='black') for m in unique_methods]
-    ax.legend(handles, unique_methods, title='Method', fontsize=9)
-
-    plt.tight_layout()
-    _savefig(f'./plots/10_{out_prefix}_external_usage_vs_success_multi.png')
-    plt.close()
+#     plt.tight_layout()
+#     # include method_name in filename label
+#     label = method_name if method_name else file_prefix
+#     label = str(label).replace(' ', '_')
+#     _savefig(f'./plots/10_{file_prefix}_external_usage_vs_success-{label}.png')
+#     plt.close()
 
 
-def plot_relationships_across_methods(dataset_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='relationships'):
-    """Aggregate metrics across methods and datasets, find strong correlations,
-    and create focused scatter plots for the strongest relationships.
+# def plot_external_usage_vs_success_multi(dataset_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='combined'):
+#     """Plot external usage vs success rate across multiple methods/dataset files.
 
-    The function builds a table with columns:
-      - method, dataset, success_rate, meaningful_pct, avg_content_length,
-        mean_ext_pct, median_ext_pct, ext_count
-    Then it computes Pearson correlations between numeric columns and
-    plots any relationship with |r| >= 0.45 (configurable threshold).
-    """
-    # Load and merge external-check results (all files matching pattern)
-    from glob import glob
-    ext_results = {}
-    for ef in sorted(glob(ext_check_pattern)):
-        try:
-            d = load_json(ef)
-            ext_results.update(d)
-        except Exception:
-            continue
+#     dataset_files: list of paths to enhanced_json_dataset_results_*.json files
+#     ext_check_pattern: glob pattern to find json check result files (merged)
+#     out_prefix: filename prefix for saved plot
+#     """
+#     # Load and merge all external check results
+#     ext_results = {}
+#     from glob import glob
+#     ext_files = sorted(glob(ext_check_pattern))
+#     for ef in ext_files:
+#         try:
+#             d = load_json(ef)
+#             ext_results.update(d)
+#         except Exception:
+#             continue
 
-    # Build per-dataset per-method table
-    rows = []
-    for df in dataset_files:
-        try:
-            data = load_json(df)
-        except Exception:
-            continue
+#     # Collect points (avg_external_pct, success_rate, label, method)
+#     xs = []
+#     ys = []
+#     labels = []
+#     methods = []
+#     counts = []
+#     stds = []
 
-        method_path = data.get('method_path', '')
-        method_seg = Path(method_path).name if method_path else Path(df).stem
-        method_label = data.get('method_name', method_seg)
+#     for df in dataset_files:
+#         try:
+#             data = load_json(df)
+#         except Exception:
+#             continue
 
-        datasets = data.get('datasets', {})
-        for ds_key, ds_val in datasets.items():
-            # collect all ext entries that mention this dataset key (across all methods)
-            vals = []
-            for path, info in ext_results.items():
-                if ds_key in path or ds_key.strip('-') in path:
-                    details = info.get('original_theorems_analysis', {}).get('details', [])
-                    if not details:
-                        continue
-                    per = [d.get('percent_of_externals_used', 0.0) for d in details]
-                    if per:
-                        vals.append(float(np.mean(per)))
+#         method_path = data.get('method_path', '')
+#         method_seg = Path(method_path).name if method_path else Path(df).stem
+#         method_label = data.get('method_name', method_seg)
 
-            mean_ext = float(np.mean(vals)) if vals else np.nan
-            med_ext = float(np.median(vals)) if vals else np.nan
-            cnt = len(vals)
+#         datasets = data.get('datasets', {})
+#         for ds_key, ds_val in datasets.items():
+#             # gather per-file avg ext pct for files belonging to this method and dataset
+#             per_file_vals = []
+#             for path, info in ext_results.items():
+#                 # Determine whether this ext entry belongs to the current method by
+#                 # checking if the path exists under the method_path root (this works
+#                 # because per-method check outputs use relative paths when saved).
+#                 try:
+#                     candidate = Path(method_path) / Path(path)
+#                     belongs = candidate.exists()
+#                 except Exception:
+#                     belongs = False
 
-            total = ds_val.get('total_files', ds_val.get('total_examples', 0))
-            successes = ds_val.get('error_stats', {}).get('successes', ds_val.get('successes', 0))
-            success_rate = (successes / total * 100) if total > 0 else np.nan
-            meaningful = ds_val.get('meaningful_percentage', ds_val.get('meaningful_percent', np.nan))
-            avg_len = ds_val.get('avg_content_length', np.nan)
+#                 # Fallback: if candidate not found, try simple substring matching
+#                 if not belongs:
+#                     if method_seg and method_seg in path:
+#                         belongs = True
 
-            rows.append({
-                'method': method_label,
-                'dataset': ds_key.strip('-'),
-                'success_rate': success_rate,
-                'meaningful_pct': meaningful,
-                'avg_content_length': avg_len,
-                'mean_ext_pct': mean_ext,
-                'median_ext_pct': med_ext,
-                'ext_count': cnt,
-            })
+#                 if not belongs:
+#                     continue
 
-    if not rows:
-        print('No dataset rows available for relationship analysis.')
-        return
+#                 # Ensure dataset key matches the path
+#                 if ds_key not in path and ds_key.strip('-') not in path:
+#                     continue
 
-    # Convert to arrays for correlation analysis
-    import math
-    numeric_keys = ['success_rate', 'meaningful_pct', 'avg_content_length', 'mean_ext_pct', 'median_ext_pct', 'ext_count']
+#                 details = info.get('original_theorems_analysis', {}).get('details', [])
+#                 if not details:
+#                     continue
+#                 vals = [d.get('percent_of_externals_used', 0.0) for d in details]
+#                 if vals:
+#                     per_file_vals.append(float(np.mean(vals)))
 
-    # Compute Pearson correlations pairwise
-    pairs = []
-    for i, a in enumerate(numeric_keys):
-        for b in numeric_keys[i+1:]:
-            xa = np.array([r[a] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) ) ])
-            xb = np.array([r[b] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) ) ])
-            if len(xa) >= 3:
-                try:
-                    rcoef = np.corrcoef(xa, xb)[0,1]
-                    pairs.append((a, b, float(rcoef), len(xa)))
-                except Exception:
-                    continue
+#             if not per_file_vals:
+#                 continue
 
-    # Sort by absolute correlation descending
-    pairs.sort(key=lambda x: abs(x[2]), reverse=True)
+#             avg_ext = float(np.mean(per_file_vals))
+#             std_ext = float(np.std(per_file_vals)) if per_file_vals else 0.0
+#             cnt = len(per_file_vals)
+#             total = ds_val.get('total_files', ds_val.get('total_examples', 0))
+#             successes = ds_val.get('error_stats', {}).get('successes', ds_val.get('successes', 0))
+#             success_rate = (successes / total * 100) if total > 0 else 0.0
 
-    # Threshold for 'strong' relationships
-    strong_threshold = 0.45
-    strong_pairs = [p for p in pairs if abs(p[2]) >= strong_threshold]
+#             xs.append(avg_ext)
+#             ys.append(success_rate)
+#             labels.append(f"{method_label}:{ds_key.strip('-')}")
+#             methods.append(method_label)
+#             counts.append(cnt)
+#             stds.append(std_ext)
 
-    if not strong_pairs:
-        print('No strong relationships found (|r| < {:.2f}).'.format(strong_threshold))
-        # Still save a baseline scatter: meaningful_pct vs success_rate
-        strong_pairs = [('meaningful_pct', 'success_rate', 0.0, len(rows))]
+#     if not xs:
+#         print("No external-check data found for multi-method external usage plot.")
+#         return
 
-    # Create a multipanel figure with top 3 strongest relations
-    top = strong_pairs[:3]
-    n = len(top)
-    fig, axes = plt.subplots(1, n, figsize=(6*n, 5))
-    if n == 1:
-        axes = [axes]
+#     # Compute correlation
+#     corr = None
+#     if len(xs) >= 2:
+#         try:
+#             corr = np.corrcoef(xs, ys)[0, 1]
+#         except Exception:
+#             corr = None
 
-    for ax, (a, b, rcoef, cnt) in zip(axes, top):
-        # gather plot data
-        xs = [r[a] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) )]
-        ys = [r[b] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) )]
-        labs = [f"{r['method']}:{r['dataset']}" for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) )]
+#     # Scatter with color by method
+#     unique_methods = sorted(set(methods))
+#     method_colors = {m: plt.cm.tab10(i % 10) for i, m in enumerate(unique_methods)}
 
-        ax.scatter(xs, ys, s=80, color='#2ecc71', edgecolor='black')
-        for x, y, l in zip(xs, ys, labs):
-            ax.text(x, y, f' {l}', fontsize=8, va='center')
+#     # Plot: scatter colored by method, size by sample count, x-error as std
+#     fig, ax = plt.subplots(figsize=(12, 7))
+#     for x_val, y_val, lbl, m, cnt, st in zip(xs, ys, labels, methods, counts, stds):
+#         size = 40 + cnt * 6
+#         # x-error = std of per-file means
+#         ax.errorbar(x_val, y_val, xerr=st, fmt='o', markersize=6, color=method_colors[m], ecolor='gray', elinewidth=1.5, capsize=3)
+#         ax.scatter(x_val, y_val, s=size, color=method_colors[m], edgecolor='black')
+#         ax.text(x_val, y_val, f' {lbl} (n={cnt})', fontsize=9, va='center')
 
-        # fit trend line
-        try:
-            z = np.polyfit(xs, ys, 1)
-            p = np.poly1d(z)
-            xs_line = np.linspace(min(xs), max(xs), 100)
-            ax.plot(xs_line, p(xs_line), linestyle='--', color='gray')
-        except Exception:
-            pass
+#     # trend line
+#     if len(xs) >= 2 and any(xs):
+#         z = np.polyfit(xs, ys, 1)
+#         p = np.poly1d(z)
+#         xs_line = np.linspace(min(xs), max(xs), 100)
+#         ax.plot(xs_line, p(xs_line), linestyle='--', color='gray')
 
-        ax.set_xlabel(a.replace('_', ' ').title(), fontsize=11, fontweight='bold')
-        ax.set_ylabel(b.replace('_', ' ').title(), fontsize=11, fontweight='bold')
-        ax.set_title(f'{a} vs {b} — r={rcoef:.2f} ({cnt} samples)')
+#     ax.set_xlabel('Average % of Externals Used in Theorems (per-file average)', fontsize=12, fontweight='bold')
+#     ax.set_ylabel('Success Rate (%)', fontsize=12, fontweight='bold')
+#     title = f'External Usage vs Success Rate (multi-method)'
+#     if corr is not None:
+#         title += f' — Pearson r = {corr:.2f}'
+#     ax.set_title(title, fontsize=14, fontweight='bold')
+#     ax.set_xlim(left=0)
+#     ax.set_ylim(0, 110)
+#     ax.grid(axis='y', alpha=0.3)
 
-    plt.tight_layout()
-    _savefig(f'./plots/11_{out_prefix}_top_relationships.png')
-    plt.close()
+#     # legend
+#     handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=method_colors[m], markersize=8, markeredgecolor='black') for m in unique_methods]
+#     ax.legend(handles, unique_methods, title='Method', fontsize=9)
+
+#     plt.tight_layout()
+#     _savefig(f'./plots/10_{out_prefix}_external_usage_vs_success_multi.png')
+#     plt.close()
+
+
+# def plot_relationships_across_methods(dataset_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='relationships'):
+#     """Aggregate metrics across methods and datasets, find strong correlations,
+#     and create focused scatter plots for the strongest relationships.
+
+#     The function builds a table with columns:
+#       - method, dataset, success_rate, meaningful_pct, avg_content_length,
+#         mean_ext_pct, median_ext_pct, ext_count
+#     Then it computes Pearson correlations between numeric columns and
+#     plots any relationship with |r| >= 0.45 (configurable threshold).
+#     """
+#     # Load and merge external-check results (all files matching pattern)
+#     from glob import glob
+#     ext_results = {}
+#     for ef in sorted(glob(ext_check_pattern)):
+#         try:
+#             d = load_json(ef)
+#             ext_results.update(d)
+#         except Exception:
+#             continue
+
+#     # Build per-dataset per-method table
+#     rows = []
+#     for df in dataset_files:
+#         try:
+#             data = load_json(df)
+#         except Exception:
+#             continue
+
+#         method_path = data.get('method_path', '')
+#         method_seg = Path(method_path).name if method_path else Path(df).stem
+#         method_label = data.get('method_name', method_seg)
+
+#         datasets = data.get('datasets', {})
+#         for ds_key, ds_val in datasets.items():
+#             # collect all ext entries that mention this dataset key (across all methods)
+#             vals = []
+#             for path, info in ext_results.items():
+#                 if ds_key in path or ds_key.strip('-') in path:
+#                     details = info.get('original_theorems_analysis', {}).get('details', [])
+#                     if not details:
+#                         continue
+#                     per = [d.get('percent_of_externals_used', 0.0) for d in details]
+#                     if per:
+#                         vals.append(float(np.mean(per)))
+
+#             mean_ext = float(np.mean(vals)) if vals else np.nan
+#             med_ext = float(np.median(vals)) if vals else np.nan
+#             cnt = len(vals)
+
+#             total = ds_val.get('total_files', ds_val.get('total_examples', 0))
+#             successes = ds_val.get('error_stats', {}).get('successes', ds_val.get('successes', 0))
+#             success_rate = (successes / total * 100) if total > 0 else np.nan
+#             meaningful = ds_val.get('meaningful_percentage', ds_val.get('meaningful_percent', np.nan))
+#             avg_len = ds_val.get('avg_content_length', np.nan)
+
+#             rows.append({
+#                 'method': method_label,
+#                 'dataset': ds_key.strip('-'),
+#                 'success_rate': success_rate,
+#                 'meaningful_pct': meaningful,
+#                 'avg_content_length': avg_len,
+#                 'mean_ext_pct': mean_ext,
+#                 'median_ext_pct': med_ext,
+#                 'ext_count': cnt,
+#             })
+
+#     if not rows:
+#         print('No dataset rows available for relationship analysis.')
+#         return
+
+#     # Convert to arrays for correlation analysis
+#     import math
+#     numeric_keys = ['success_rate', 'meaningful_pct', 'avg_content_length', 'mean_ext_pct', 'median_ext_pct', 'ext_count']
+
+#     # Compute Pearson correlations pairwise
+#     pairs = []
+#     for i, a in enumerate(numeric_keys):
+#         for b in numeric_keys[i+1:]:
+#             xa = np.array([r[a] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) ) ])
+#             xb = np.array([r[b] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) ) ])
+#             if len(xa) >= 3:
+#                 try:
+#                     rcoef = np.corrcoef(xa, xb)[0,1]
+#                     pairs.append((a, b, float(rcoef), len(xa)))
+#                 except Exception:
+#                     continue
+
+#     # Sort by absolute correlation descending
+#     pairs.sort(key=lambda x: abs(x[2]), reverse=True)
+
+#     # Threshold for 'strong' relationships
+#     strong_threshold = 0.45
+#     strong_pairs = [p for p in pairs if abs(p[2]) >= strong_threshold]
+
+#     if not strong_pairs:
+#         print('No strong relationships found (|r| < {:.2f}).'.format(strong_threshold))
+#         # Still save a baseline scatter: meaningful_pct vs success_rate
+#         strong_pairs = [('meaningful_pct', 'success_rate', 0.0, len(rows))]
+
+#     # Create a multipanel figure with top 3 strongest relations
+#     top = strong_pairs[:3]
+#     n = len(top)
+#     fig, axes = plt.subplots(1, n, figsize=(6*n, 5))
+#     if n == 1:
+#         axes = [axes]
+
+#     for ax, (a, b, rcoef, cnt) in zip(axes, top):
+#         # gather plot data
+#         xs = [r[a] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) )]
+#         ys = [r[b] for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) )]
+#         labs = [f"{r['method']}:{r['dataset']}" for r in rows if not (r[a] is None or (isinstance(r[a], float) and math.isnan(r[a]))) and not (r[b] is None or (isinstance(r[b], float) and math.isnan(r[b])) )]
+
+#         ax.scatter(xs, ys, s=80, color='#2ecc71', edgecolor='black')
+#         for x, y, l in zip(xs, ys, labs):
+#             ax.text(x, y, f' {l}', fontsize=8, va='center')
+
+#         # fit trend line
+#         try:
+#             z = np.polyfit(xs, ys, 1)
+#             p = np.poly1d(z)
+#             xs_line = np.linspace(min(xs), max(xs), 100)
+#             ax.plot(xs_line, p(xs_line), linestyle='--', color='gray')
+#         except Exception:
+#             pass
+
+#         ax.set_xlabel(a.replace('_', ' ').title(), fontsize=11, fontweight='bold')
+#         ax.set_ylabel(b.replace('_', ' ').title(), fontsize=11, fontweight='bold')
+#         ax.set_title(f'{a} vs {b} — r={rcoef:.2f} ({cnt} samples)')
+
+#     plt.tight_layout()
+#     _savefig(f'./plots/11_{out_prefix}_top_relationships.png')
+#     plt.close()
 
 
 def main():
@@ -1181,17 +1181,17 @@ def main():
     except Exception as e:
         print(f"Warning: could not run dataset-level plots: {e}")
     # Try multi-method external usage plot using all enhanced_json_dataset_results_*.json files
-    try:
-        from glob import glob
-        all_dataset_result_files = sorted(glob('enhanced_json_dataset_results_*.json'))
-        if all_dataset_result_files:
-            plot_external_usage_vs_success_multi(all_dataset_result_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='all_methods')
-            print("✓ Multi-method: External usage vs success rate (combined)")
-            # Run relationship discovery and plotting across all methods/datasets
-            plot_relationships_across_methods(all_dataset_result_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='all_methods')
-            print("✓ Multi-method: Relationship discovery and plots generated")
-    except Exception as e:
-        print(f"Warning: could not run multi-method external usage plot: {e}")
+    # try:
+    #     from glob import glob
+    #     all_dataset_result_files = sorted(glob('enhanced_json_dataset_results_*.json'))
+    #     if all_dataset_result_files:
+    #         plot_external_usage_vs_success_multi(all_dataset_result_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='all_methods')
+    #         print("✓ Multi-method: External usage vs success rate (combined)")
+    #         # Run relationship discovery and plotting across all methods/datasets
+    #         plot_relationships_across_methods(all_dataset_result_files, ext_check_pattern='amr_json_external_axiom_check_results_*.json', out_prefix='all_methods')
+    #         print("✓ Multi-method: Relationship discovery and plots generated")
+    # except Exception as e:
+    #     print(f"Warning: could not run multi-method external usage plot: {e}")
     
     
     print("\n" + "=" * 60)
